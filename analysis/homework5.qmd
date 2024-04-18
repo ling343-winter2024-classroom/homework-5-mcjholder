@@ -1,0 +1,142 @@
+---
+title: "My Homework 5"
+author: "Mary Holder"
+format: html
+editor: visual
+---
+
+## 
+
+This study tests the extent of prediction in sentence processing. It shows that participants given a maze sentence processing task, choosing to continue the sentence with a correct word or a distractor word, react more slowly both to unexpected correct words and to unexpected correct articles. For example, in the sentence "Orlando thought that glass was a solid but when he held it under the Bunsen burner it melted and turned into an element that could be sculpted.", the unexpected occurrence of "an element" rather than (presumably) "a liquid" resulted in longer processing times both of "element" and "an". 
+
+The data collected during the experiment were recorded as follows:
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(knitr)
+# install.packages('kableExtra')
+library(kableExtra)
+library(tinytable)
+library(gt)
+here::i_am("analysis/homework5.qmd")
+library(here)
+
+dict_str <- c("Index - Results index, Time - Time of response, Hash - Derived from the IP address of each participant, Owner - Logged in as experiment owner? (if known), Controller - Controller name, Item - Sentence number, Element - Element number, exp - experimenter's name, expect - whether the item was expected or unexpected, position - position in the sentence relative to the target word, pos - the index of the target word, FieldName - the question being asked of the participant, Value - the answer to the question in FieldName, WordNum - index of word positions within sentence, Word - Correct word, Alt - Alternative word, WordOn - Word on (0=left, 1=right), CorrWord - Whether or not the correct word was chosen, RT - Reading time to first answer, Sent - Sentence, TotalTime - Total time to correct answer, Question - Question (NULL if none)., Resp - Answer, Acc - Whether or not answer was correct (NULL if N/A), RespRT - Time taken to answer")
+dict_items <- as.data.frame(strsplit(dict_str, split = ", "), col.names = c("Variable"))
+dict <- dict_items %>% 
+  mutate("Information"= sapply(strsplit(as.character(dict_items$Variable), " - "), "[[", 1)) %>% 
+  mutate("Variable"= sapply(strsplit(as.character(dict_items$Variable), " - "), "[", 2))
+dict %>% 
+  gt()
+```
+
+```{r include=FALSE}
+df_all <- read.csv(here("data/delong maze 40Ss.csv"), 
+              header = 1, sep = ",", comment.char = "#", strip.white = T,
+              col.names = c("Index","Time","Counter","Hash","Owner","Controller","Item","Element","Type","Group","FieldName","Value","WordNum","Word","Alt","WordOn","CorrWord","RT","Sent","TotalTime","Question","Resp","Acc","RespRT"))
+
+df_rt <- df_all |> 
+  filter(Controller == "Maze" & !str_detect(Type, "prac")) |> 
+  select(1:10, 13:20) |> 
+  separate(col = Type, 
+           into = c("exp", "item", "expect", "position", "pos", 
+                    "cloze", "art.cloze", "n.cloze"), 
+           sep = "\\.", convert = TRUE, fill = "right") |> 
+  mutate(WordNum = as.numeric(WordNum),
+         Acc = as.numeric(as.character(recode(CorrWord, yes = "1", no = "0"))),
+         n.cloze.scale =  scale(n.cloze), 
+         art.cloze.scale = scale(art.cloze)) |> 
+  mutate(across(where(is.character), as.factor)) |> 
+  filter(item != 29) |> 
+  filter(Hash != "9dAvrH0+R6a0U5adPzZSyA") %>% 
+  mutate("rgnfx" = (WordNum - pos + 1))
+View(df_rt)
+```
+
+```{r echo=FALSE}
+num <- length(unique(df_rt$Index))
+```
+
+
+
+```{r echo=FALSE}
+df_filtered <- df_rt %>% 
+  filter(CorrWord != "no")
+remn <- nrow(df_filtered)
+```
+
+There are `r num` participants in this study, between the ages of 18 and 71. After excluding responses where participants did not select the correct word, `r remn` rows of data remained.
+
+
+```{r echo=FALSE}
+age_data <- df_all %>% 
+  filter(FieldName == "age") %>% 
+  select(Value) %>% 
+  mutate("Value" = as.numeric(Value))
+
+age_table <- tribble(
+  ~Mean, ~Min, ~Max, ~`Standard Deviation`,
+   mean(age_data$Value), min(age_data$Value), max(age_data$Value), sd(age_data$Value),
+)
+age_table %>% 
+  gt() %>% 
+  tab_header("Age statistics")
+```
+
+Examining the three content words on either side of the article and noun pair, there is a clear distinction between expected and unexpected articles and nouns.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+mean_df <- df_rt %>% 
+  group_by(expect, rgnfx) %>% 
+  mutate("meanrt" = mean(RT))
+mean_df <- mean_df %>% 
+  group_by(rgnfx) %>% 
+  mutate("sdrt" = sd(RT))
+
+mean_df %>% 
+  filter(between(rgnfx, -3, 4)) %>% 
+  ggplot(mapping = aes(rgnfx, meanrt, fill=expect)) +
+  theme_bw()+
+  geom_point(aes(shape = expect)) +
+  scale_shape_manual(values = c(1, 16), labels=c("Expected", "Unexpected"))+
+  geom_line()+
+  # geom_errorbar(aes(ymin=meanrt-sdrt, ymax=meanrt+sdrt, width=.1))+
+  scale_x_continuous(breaks = seq(-3, 5, by = 1), labels=c("CW-3", "CW-2", "CW-1", "art", "n", "CW+1", "CW+2", "CW+3", "CW+4"))+
+  labs(x="Word", y="Response time (msec)")+
+  theme(legend.title = element_blank())+
+  guides(fill=FALSE)
+```
+
+```{r echo=FALSE}
+
+
+tabledata <- mean_df %>% 
+  filter(between(rgnfx, -3, 4)) %>%
+  select(rgnfx, meanrt, expect) %>% 
+  unique() 
+View(tabledata)
+
+tabledata$rownames <-  c("CW-3", "CW-2", "CW-1", "art", "n", "CW+1", "CW+2", "CW+3", "CW-3", "CW-2", "CW-1", "art", "n", "CW+1", "CW+2", "CW+3")
+
+
+
+expect <- tabledata %>% 
+  filter(expect=="expected") %>%
+  select(rgnfx, meanrt) %>% 
+  kbl(caption = "Expected") |> 
+  kable_styling()
+
+unexpect <- tabledata %>% 
+  filter(expect=="unexpected") %>%
+  select(rgnfx, meanrt) %>% 
+  kbl(caption = "Unexpected") |> 
+  kable_styling()
+
+expect
+```
+
+```{r echo=FALSE}
+unexpect
+```
+As shown in the data illustrated above, response times were longest at the unexpected noun, and shortest at the expected noun and article. This suggests that participants were actively predicting both articles and nouns.
